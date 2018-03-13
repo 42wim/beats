@@ -58,39 +58,39 @@ func New(registryFile string, flushTimeout time.Duration, out successLogger) (*R
 func (r *Registrar) Init() error {
 	if os.Getenv("CONSUL_HTTP_ADDR") != "" {
 		logp.Info("Using consul to load registrar data. CONSUL_HTTP_ADDR found")
-	} else {
-		// The registry file is opened in the data path
-		r.registryFile = paths.Resolve(paths.Data, r.registryFile)
-
-		// Create directory if it does not already exist.
-		registryPath := filepath.Dir(r.registryFile)
-		err := os.MkdirAll(registryPath, 0750)
-		if err != nil {
-			return fmt.Errorf("Failed to created registry file dir %s: %v", registryPath, err)
-		}
-
-		// Check if files exists
-		fileInfo, err := os.Lstat(r.registryFile)
-		if os.IsNotExist(err) {
-			logp.Info("No registry file found under: %s. Creating a new registry file.", r.registryFile)
-			// No registry exists yet, write empty state to check if registry can be written
-			return r.writeRegistry()
-		}
-		if err != nil {
-			return err
-		}
-
-		// Check if regular file, no dir, no symlink
-		if !fileInfo.Mode().IsRegular() {
-			// Special error message for directory
-			if fileInfo.IsDir() {
-				return fmt.Errorf("Registry file path must be a file. %s is a directory.", r.registryFile)
-			}
-			return fmt.Errorf("Registry file path is not a regular file: %s", r.registryFile)
-		}
-
-		logp.Info("Registry file set to: %s", r.registryFile)
+		return nil
 	}
+	// The registry file is opened in the data path
+	r.registryFile = paths.Resolve(paths.Data, r.registryFile)
+
+	// Create directory if it does not already exist.
+	registryPath := filepath.Dir(r.registryFile)
+	err := os.MkdirAll(registryPath, 0750)
+	if err != nil {
+		return fmt.Errorf("Failed to created registry file dir %s: %v", registryPath, err)
+	}
+
+	// Check if files exists
+	fileInfo, err := os.Lstat(r.registryFile)
+	if os.IsNotExist(err) {
+		logp.Info("No registry file found under: %s. Creating a new registry file.", r.registryFile)
+		// No registry exists yet, write empty state to check if registry can be written
+		return r.writeRegistry()
+	}
+	if err != nil {
+		return err
+	}
+
+	// Check if regular file, no dir, no symlink
+	if !fileInfo.Mode().IsRegular() {
+		// Special error message for directory
+		if fileInfo.IsDir() {
+			return fmt.Errorf("Registry file path must be a file. %s is a directory.", r.registryFile)
+		}
+		return fmt.Errorf("Registry file path is not a regular file: %s", r.registryFile)
+	}
+
+	logp.Info("Registry file set to: %s", r.registryFile)
 
 	return nil
 }
@@ -315,33 +315,32 @@ func (r *Registrar) writeRegistry() error {
 		statesCurrent.Set(int64(len(states)))
 
 		return nil
-	} else {
-		logp.Debug("registrar", "Write registry file: %s", r.registryFile)
+	}
+	logp.Debug("registrar", "Write registry file: %s", r.registryFile)
 
-		tempfile := r.registryFile + ".new"
-		f, err := os.OpenFile(tempfile, os.O_RDWR|os.O_CREATE|os.O_TRUNC|os.O_SYNC, 0600)
-		if err != nil {
-			logp.Err("Failed to create tempfile (%s) for writing: %s", tempfile, err)
-			return err
-		}
-
-		encoder := json.NewEncoder(f)
-		err = encoder.Encode(states)
-		if err != nil {
-			f.Close()
-			logp.Err("Error when encoding the states: %s", err)
-			return err
-		}
-
-		// Directly close file because of windows
-		f.Close()
-
-		err = helper.SafeFileRotate(r.registryFile, tempfile)
-
-		logp.Debug("registrar", "Registry file updated. %d states written.", len(states))
-		registryWrites.Add(1)
-		statesCurrent.Set(int64(len(states)))
-
+	tempfile := r.registryFile + ".new"
+	f, err := os.OpenFile(tempfile, os.O_RDWR|os.O_CREATE|os.O_TRUNC|os.O_SYNC, 0600)
+	if err != nil {
+		logp.Err("Failed to create tempfile (%s) for writing: %s", tempfile, err)
 		return err
 	}
+
+	encoder := json.NewEncoder(f)
+	err = encoder.Encode(states)
+	if err != nil {
+		f.Close()
+		logp.Err("Error when encoding the states: %s", err)
+		return err
+	}
+
+	// Directly close file because of windows
+	f.Close()
+
+	err = helper.SafeFileRotate(r.registryFile, tempfile)
+
+	logp.Debug("registrar", "Registry file updated. %d states written.", len(states))
+	registryWrites.Add(1)
+	statesCurrent.Set(int64(len(states)))
+
+	return err
 }
